@@ -1,0 +1,57 @@
+// Production integration check. Run after build + preview on localhost:4173.
+import { chromium } from '@playwright/test'
+import assert from 'node:assert/strict'
+import { mkdir } from 'node:fs/promises'
+console.log('Launching test browser')
+const browser=await chromium.launch({channel:process.env.PLAYWRIGHT_CHANNEL||'chrome',headless:true,timeout:60000,args:['--no-proxy-server']})
+console.log('Browser launched')
+await mkdir('test-results',{recursive:true})
+const context=await browser.newContext({viewport:{width:390,height:844},locale:'ru-RU',timezoneId:'Europe/Saratov',serviceWorkers:'allow'})
+const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message))
+page.setDefaultTimeout(30000)
+const base='http://127.0.0.1:4173/'
+async function openPerson(){await page.locator('.employee-row').filter({hasText:'Иванов Иван'}).click();await page.locator('dialog').waitFor()}
+async function closePerson(){await page.getByRole('button',{name:'Закрыть',exact:true}).click()}
+try {
+  console.log('Opening production app');await page.goto(base,{waitUntil:'domcontentloaded',timeout:60000});await page.getByRole('button',{name:'Добавить первые записи'}).click()
+  const people=page.locator('.settings-card').filter({has:page.getByRole('heading',{name:'Сотрудники',exact:true})})
+  await people.getByPlaceholder('Фамилия и имя').fill('Иванов Иван');await people.getByRole('button',{name:'Добавить',exact:true}).click();await people.locator('.directory-row').waitFor()
+  const rooms=page.locator('.settings-card').filter({has:page.getByRole('heading',{name:'Кабинеты',exact:true})})
+  for(const name of ['Кабинет 9','Кабинет 8']){await rooms.getByPlaceholder('Название кабинета').fill(name);await rooms.getByRole('button',{name:'Добавить',exact:true}).click();await rooms.locator('.directory-row').filter({hasText:name}).waitFor()}
+  console.log('Directories created');await page.getByRole('button',{name:/Местонахождение/}).click()
+  assert.match(await page.locator('.employee-row').innerText(),/Не прибыл/)
+  await openPerson();await page.getByRole('button',{name:'Кабинет 9',exact:true}).click();await page.locator('dialog').waitFor({state:'detached'})
+  assert.match(await page.locator('.employee-row').innerText(),/Кабинет 9/)
+  await openPerson();await page.getByRole('button',{name:'Кабинет 8',exact:true}).click();await page.locator('dialog').waitFor({state:'detached'})
+  await openPerson();await page.getByRole('button',{name:'↗ Убыл',exact:true}).click();await page.locator('dialog').waitFor({state:'detached'})
+  assert.match(await page.locator('.employee-row').innerText(),/Убыл/)
+  await openPerson();await page.getByRole('button',{name:'Кабинет 9',exact:true}).click();await page.locator('dialog').waitFor({state:'detached'})
+  await openPerson();await page.getByRole('button',{name:'✓ Завершил день',exact:true}).click();await page.locator('dialog').waitFor({state:'detached'})
+  await openPerson();assert.equal(await page.getByRole('button',{name:'Кабинет 8',exact:true}).count(),0)
+  await page.getByRole('button',{name:'Возобновить день',exact:true}).click();await page.getByRole('button',{name:'Кабинет 8',exact:true}).click();await page.locator('dialog').waitFor({state:'detached'})
+  await openPerson();assert.equal(await page.locator('dialog .timeline li').count(),6)
+  await page.getByRole('button',{name:'↶ Отменить последнее',exact:true}).click();await page.locator('dialog').waitFor({state:'detached'})
+  assert.match(await page.locator('.employee-row').innerText(),/Завершил день/)
+  console.log('Movement and undo workflow passed');await page.getByRole('button',{name:/Журнал событий/}).click();assert.equal(await page.locator('.timeline li').count(),5)
+  await page.getByRole('button',{name:/Настройки/}).click();await page.getByLabel('Тема приложения').selectOption('dark')
+  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark')
+  const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'↓ Экспортировать JSON',exact:true}).click();const download=await downloadPromise;await download.saveAs('test-results/backup.json')
+  await page.locator('input[type=file]').setInputFiles('test-results/backup.json');await page.getByRole('heading',{name:'Заменить все данные?'}).waitFor()
+  await page.locator('input[type=file]').setInputFiles({name:'broken.json',mimeType:'application/json',buffer:Buffer.from('{broken')})
+  await page.locator('.error-inline').waitFor()
+  assert.equal(await page.getByRole('button',{name:'Заменить данные',exact:true}).count(),0,'Invalid file must invalidate earlier backup confirmation')
+  await page.locator('input[type=file]').setInputFiles('test-results/backup.json');await page.getByRole('heading',{name:'Заменить все данные?'}).waitFor();await page.getByRole('button',{name:'Заменить данные',exact:true}).click();await page.getByRole('status').filter({hasText:'восстановлена'}).waitFor()
+  await page.getByRole('button',{name:/Местонахождение/}).click()
+  console.log('Backup restore passed');await page.screenshot({path:'test-results/mobile-dark.png',fullPage:true})
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'mobile overflow')
+  await page.waitForFunction(async()=>!!(await navigator.serviceWorker.getRegistration())?.active,{timeout:30000})
+  await page.reload();await page.waitForFunction(()=>!!navigator.serviceWorker.controller)
+  await context.setOffline(true);await page.reload();await page.locator('.employee-row').waitFor()
+  assert.match(await page.locator('.employee-row').innerText(),/Завершил день/)
+  await openPerson();await page.getByRole('button',{name:'Возобновить день',exact:true}).click();await page.getByRole('button',{name:'Кабинет 9',exact:true}).click();await page.locator('dialog').waitFor({state:'detached'})
+  await page.reload();await page.locator('.employee-row').waitFor();assert.match(await page.locator('.employee-row').innerText(),/Кабинет 9/)
+  await context.setOffline(false);await page.getByRole('button',{name:/Настройки/}).click();await page.getByLabel('Тема приложения').selectOption('light');await page.waitForFunction(()=>document.documentElement.dataset.theme==='light')
+  await page.getByRole('button',{name:/Местонахождение/}).click();await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'test-results/desktop-light.png',fullPage:true})
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'desktop overflow')
+  assert.deepEqual(errors,[]);console.log('PASS: mobile workflow, six event types, undo, journal, themes, JSON restore, production service worker, offline reload + write + persistence, desktop layout; no page errors')
+} finally {await browser.close()}
