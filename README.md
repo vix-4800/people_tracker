@@ -1,132 +1,118 @@
-# Учёт перемещений
+# People Tracker
 
-Клиентское PWA для ручного учёта сотрудников в офисе. Vue 3 Composition API, строгий TypeScript, Vite, Dexie / IndexedDB, vite-plugin-pwa. Интерфейс полностью на русском, светлая и тёмная темы. Сервера, аккаунтов, аналитики и отправки данных нет.
+A PWA for manually tracking employee locations within an office. An operator selects an employee and a room, and the application records the time and movement history on the device.
 
-## Запуск
+[Repository](https://github.com/vix-4800/people_tracker) · [GitHub Pages](https://vix-4800.github.io/people_tracker/)
 
-Требуется Node.js 22.12+ (или 24 LTS) и npm. В папке проекта:
+## Features
+
+- Employee list with search, filters, sorting, and current locations.
+- People and Rooms views with employee status counts.
+- Arrival, room changes, temporary departure, return, end of day, and explicit reopening of the working day.
+- Individual employee history and a shared event log for the selected date, with undo for the latest action today.
+- Configurable employee and room directories: add, rename, reorder, archive, and restore.
+- Full database export and restore in JSON format.
+- Light, dark, and system themes, with mobile and desktop layouts.
+- PWA installation and offline operation after the initial load.
+
+The application runs entirely on the client, with no server, accounts, analytics, or automatic synchronization between devices. Its interface is in Russian.
+
+## Technology
+
+Vue 3 Composition API, TypeScript, Vite, Dexie / IndexedDB, and vite-plugin-pwa. Business logic and storage are tested with Vitest; the browser integration scenario uses Playwright.
+
+## Local development
+
+Requirements: Node.js 24 and pnpm 11.25.0, matching the deployment workflow.
 
 ```sh
-npm install
-npm run dev
+git clone https://github.com/vix-4800/people_tracker.git
+cd people_tracker
+npm install --global pnpm@11.25.0
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-Откройте адрес, напечатанный Vite (обычно http://localhost:5173). В этой среде вместо npm доступен pnpm; можно выполнить `pnpm install` и `pnpm dev`. В репозитории сохранён pnpm-lock.yaml; для воспроизводимой установки используйте `pnpm install --frozen-lockfile`.
+Open the URL printed by Vite, usually `http://localhost:5173`.
+
+## Checks and production build
 
 ```sh
-npm run typecheck
-npm test
-npm run build
-npm run preview
-```
-
-`build` проверяет типы и создаёт `dist/`. `preview` обслуживает production-сборку на http://localhost:4173. Service worker включён в production, а не в dev. `npm test` выполняет Vitest однократно.
-
-Дополнительно: при запущенном production-preview на порту 4173 команда `npm run test:browser` запускает интеграционный сценарий в отдельном временном профиле Chrome (требуется установленный Google Chrome). Для Edge задайте `PLAYWRIGHT_CHANNEL=msedge`. Проверяются мобильный ввод, все типы событий, отмена, журнал, темы, восстановление JSON, перезагрузка и запись без сети. Скриншоты и тестовая копия сохраняются в игнорируемую папку `test-results/`. Android-установку следует дополнительно проверить на физическом устройстве.
-
-## Работа
-
-1. В «Настройках» добавьте сотрудников и кабинеты. Справочники при первом запуске пусты.
-2. В разделе «Местонахождение» нажмите на сотрудника, затем на кабинет. Время записывается автоматически. Повтор текущего кабинета не создаёт отметку.
-3. «Убыл» означает временное отсутствие; следующий выбор кабинета регистрирует возвращение. «Завершил день» блокирует обычные действия. Для неожиданного возвращения нажмите «Возобновить день» и выберите кабинет.
-4. История сотрудника открывается в его карточке. «Отменить последнее» удаляет его последнюю отметку за сегодня и восстанавливает предыдущее состояние. Остальные сотрудники не затрагиваются.
-5. Общая история находится в «Журнале событий». Дата выбирается сверху. Прошлые дни доступны только для чтения. В полночь выбранное «сегодня» переключается автоматически; при возврате из фона дата проверяется снова.
-6. В справочниках доступны изменение имени, архив, восстановление и стрелки порядка. История ссылается на стабильные ID и показывает актуальные имена. Кабинет в архиве остаётся видимым, пока в нём есть сотрудники. Архивные сотрудники доступны в журнале и при просмотре прошлых дней.
-
-## Размещение
-
-### GitHub Pages
-
-В проект уже добавлен `.github/workflows/deploy.yml`. При отправке изменений в `main` он устанавливает зависимости по lockfile, запускает тесты, проверяет TypeScript, собирает и публикует `dist/`. Доступен также ручной запуск во вкладке Actions.
-
-1. Создайте пустой репозиторий на GitHub, например `tracker`. Для GitHub Free выберите публичный репозиторий.
-2. Отправьте исходники проекта, включая `.github/`, `pnpm-lock.yaml` и `pnpm-workspace.yaml`. Папки `node_modules/`, `dist/` и `test-results/` уже исключены через `.gitignore`.
-3. В репозитории откройте **Settings → Pages → Build and deployment → Source** и выберите **GitHub Actions**.
-4. Откройте **Actions → Publish to GitHub Pages → Run workflow**, выберите `main` и запустите публикацию. Последующие push в `main` публикуются автоматически.
-5. Дождитесь успешного завершения заданий `Test and build` и `Deploy`. Адрес сайта появится в результате deployment и в Settings → Pages. Для обычного репозитория это `https://USERNAME.github.io/tracker/`.
-
-Первичная отправка из этой папки в пустой репозиторий (замените `USERNAME` и при необходимости `tracker`):
-
-```sh
-git init -b main
-git add .
-git commit -m "Prepare application for GitHub Pages"
-git remote add origin https://github.com/USERNAME/tracker.git
-git push -u origin main
-```
-
-Если репозиторий уже настроен, используйте обычные `git add`, `git commit` и `git push` вместо повторного добавления remote. Workflow рассчитан на ветку `main`; для другой основной ветки измените `on.push.branches` в нём.
-
-**Редактировать `base` вручную не требуется:** workflow получает `base_path` из `actions/configure-pages` и передаёт его в Vite через `--base`. Это поддерживает любое имя репозитория, корневой сайт `USERNAME.github.io` и настроенный собственный домен. В локальной конфигурации остаётся `base: './'`. Манифест, иконки и service worker собираются для того же пути.
-
-Для локальной проверки сборки под подкаталогом:
-
-```sh
+pnpm typecheck
 pnpm test
-pnpm build --base /tracker/
-pnpm preview --base /tracker/
+pnpm build
+pnpm preview
 ```
 
-Откройте `http://localhost:4173/tracker/`. Браузерный интеграционный сценарий также можно направить на этот адрес: в PowerShell `$env:APP_URL='http://127.0.0.1:4173/tracker/'; pnpm test:browser`.
+`build` checks TypeScript and generates the production build in `dist/`. `preview` serves it at `http://localhost:4173`. The service worker is enabled in production builds and is not registered in `dev` mode.
 
-Если первый автоматический запуск произошёл до включения Pages и завершился ошибкой, включите Pages по шагу 3 и запустите workflow повторно. Настройка следует официальным инструкциям [Vite](https://vite.dev/guide/static-deploy.html#github-pages) и [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+To preview the GitHub Pages build:
 
-На хостинг отправляется только приложение. Записи сотрудников остаются в IndexedDB браузера. Для переноса записей с localhost экспортируйте JSON на старом адресе и импортируйте на опубликованном сайте. Не добавляйте персональные резервные копии в репозиторий.
-
-### Другой статический хостинг
-
-Передайте **всё содержимое `dist/`** на статический HTTPS-хостинг либо внутренний HTTPS-сервер. Node.js на сервере не требуется. Относительный `base: './'` позволяет размещать сборку в подкаталоге. URL каталога должен заканчиваться `/`. Не открывайте index.html через `file://`.
-
-Для nginx, например:
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name office.example;
-    ssl_certificate /etc/nginx/tls/fullchain.pem;
-    ssl_certificate_key /etc/nginx/tls/privkey.pem;
-    root /var/www/tracker/dist;
-    location / { try_files $uri $uri/ /index.html; }
-    location = /sw.js { add_header Cache-Control "no-cache"; }
-    location = /index.html { add_header Cache-Control "no-cache"; }
-}
+```sh
+pnpm build --base /people_tracker/
+pnpm preview --base /people_tracker/
 ```
 
-Для внутренней сети сертификат должен быть доверен устройствам. Обычный HTTP на IP-адресе локальной сети не позволяет устанавливать service worker. Исключение для разработки — `localhost` на том же устройстве. Preview-сервер предназначен для проверки, не для постоянной эксплуатации.
+Preview URL: `http://localhost:4173/people_tracker/`.
 
-При обновлении загружайте весь новый `dist/` вместе; желательно сохранять предыдущие файлы с хэшами до окончания перехода открытых вкладок. Приложение предложит обновление. Сохранённая база IndexedDB при обновлении приложения не удаляется. Закройте остальные вкладки при обновлении схемы БД. Не меняйте домен, протокол и порт без переноса данных копией.
+With production preview running, `pnpm test:browser` checks movement entry, all event types, undo, the event log, themes, JSON import, and offline persistence. Google Chrome must be installed. The test opens `http://127.0.0.1:4173/` by default; set `APP_URL` to use another address. For example, to test the Pages build in PowerShell:
 
-## Установка PWA
+```powershell
+$env:APP_URL = 'http://127.0.0.1:4173/people_tracker/'
+pnpm test:browser
+```
 
-**Android:** откройте HTTPS-адрес в Chrome, дождитесь сообщения о готовности к офлайн-работе, затем меню браузера → «Установить приложение» / «Добавить на главный экран». Откройте с иконки. Название команды зависит от версии браузера.
+For Microsoft Edge, set `PLAYWRIGHT_CHANNEL=msedge`. The test uses a separate temporary browser profile and saves screenshots and a test backup in `test-results/`.
 
-**Windows:** откройте HTTPS-адрес в Chrome или Edge и используйте кнопку установки в адресной строке либо меню браузера → установка приложения. Запускайте из меню «Пуск». В Linux используйте совместимый Chromium-браузер; обычная вкладка также поддерживается.
+## Usage
 
-**Проверка офлайн:** соберите и откройте production-версию, дождитесь готовности офлайн-режима, закройте приложение, отключите сеть / включите авиарежим и откройте снова с иконки. Добавьте отметку, закройте и откройте приложение — состояние и журнал должны сохраниться. Экспорт также работает без сети. После обновления service worker предложит перезагрузку, а не прервёт работу молча.
+1. Add employees and rooms in Settings. Both directories are empty on first launch.
+2. In the location view, select an employee and then a room. The first room assignment of the day records an arrival; subsequent changes record movements. Selecting the current room again does not create an event.
+3. Temporary departure marks an employee as away. Selecting a room afterward records a return. After ending the day, explicitly reopen it and select a room before recording further movements.
+4. An employee's card shows their history, first arrival time, and final departure time. Undo removes that employee's latest event today and restores the previous state.
+5. Select a date to view previous days. Historical dates are read-only. At the start of a new calendar day, employees appear as not yet arrived; history and directories are preserved.
+6. Archiving hides an entry from the active directory while preserving its history. Renaming does not break references: events use stable IDs and display current names.
 
-## Резервные копии
+## GitHub Pages deployment
 
-«Настройки» → «Экспортировать JSON» скачивает согласованный снимок всех четырёх таблиц, включая архив и настройки. Делайте копии регулярно и храните их в надёжном месте: файл содержит имена и историю сотрудников открытым текстом.
+Deployment is configured in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). It runs on pushes to `main` or manually through **Actions → Publish to GitHub Pages → Run workflow**.
 
-Для восстановления выберите JSON. Проверяются версия формата, типы данных, уникальность ID, ссылки на справочники, календарные даты и допустимость всей цепочки переходов. После проверки показывается состав копии и требуется подтверждение **полной замены** текущей базы. Можно сначала скачать текущую базу. Восстановление происходит одной транзакцией: ошибка не оставляет половину базы. Импорт не объединяет базы.
+In the [repository settings](https://github.com/vix-4800/people_tracker/settings/pages), select **Pages → Build and deployment → Source → GitHub Actions**.
 
-Экспорт имеет `format: "office-movements"`, `version: 1`. Максимальный размер файла в интерфейсе — 25 МБ. Более новые неподдерживаемые версии отклоняются. Дата учётного дня сохраняется при переносе в другой часовой пояс; время отображается в локальном часовом поясе устройства просмотра.
+The workflow installs dependencies from the lockfile, runs tests, checks TypeScript, builds the application, and publishes `dist/`. The site path is passed to Vite automatically from the Pages configuration; there is no need to edit `base` in `vite.config.ts` manually.
 
-## Ограничения локального хранения
+Deployment URL: [vix-4800.github.io/people_tracker/](https://vix-4800.github.io/people_tracker/). Workflow status is available under [Actions](https://github.com/vix-4800/people_tracker/actions).
 
-- Данные привязаны к браузеру, профилю и origin (протокол + домен + порт), а не к аккаунту. Между устройствами и браузерами они не синхронизируются. Перенос — через JSON.
-- Очистка данных сайта, удаление профиля, приватный режим, сброс устройства или очистка браузером при нехватке места могут уничтожить данные. Установка PWA не является резервной копией.
-- В настройках есть запрос постоянного хранения через `navigator.storage.persist()`. Браузер может отказать; приложение продолжит работу и сообщит результат.
-- Все действия получают время устройства. Приложение не проверяет его по серверу. Порядок отметок хранится отдельно от timestamp, поэтому перевод часов назад не нарушает последовательность событий.
-- Нет контроля доступа, GPS, автоматического определения присутствия и центральной базы. За точность отметок отвечает оператор.
+When an update is available, the application offers to reload. The IndexedDB database is preserved. To move data from localhost to the published site, export JSON at the old address and restore it at the new one.
 
-## Структура
+## Installation and offline use
 
-- `src/domain/` — модели, чистая машина состояний и тесты.
-- `src/data/` — Dexie, транзакции, версия схемы 1 → 2 с миграцией порядка, строгая валидация резервных копий, тесты на fake-indexeddb.
-- `src/composables/` — реактивная подписка liveQuery, смена суток, команды и обработка ошибок.
-- `src/components/` — список, панель действий, история и справочники.
-- `src/App.vue` — навигация, фильтры и представления.
-- `public/icons/` — локальные PNG 192/512 и maskable; `vite.config.ts` — манифест и кэш ресурсов.
+Open the published application and wait for the message confirming that it is ready to work offline.
 
-Pinia не используется: одного composable с подпиской на IndexedDB достаточно. Одновременные отметки сериализуются транзакцией, подписка обновляет открытые вкладки. События не создаются при наступлении нового дня.
+- **Android:** use Chrome's menu to install the application or add it to the home screen.
+- **Windows:** use the install button in Chrome or Edge's address bar, or the corresponding browser menu item.
+- **Linux:** the application works in the browser; installation is available in browsers that support PWAs.
+
+To check offline operation, close the application, disconnect from the network, and reopen it. Record a movement and restart the application; the state should persist. PWA functionality requires HTTPS, with `localhost` as a local development exception.
+
+## Backups and data storage
+
+In Settings, choose JSON export to download the directories, archived entries, events, and settings. Restore validates the format, version, unique IDs, references, and event sequence. After confirmation, the backup completely replaces the current database in a single transaction. Database merging is not supported.
+
+Backup format: `office-movements`, version `1`. The maximum import file size is 25 MB. Backups contain employee names and movement history in plain text; keep them outside the repository.
+
+Data is tied to the device, browser profile, and site origin (protocol, domain, and port). It does not synchronize automatically between devices. Clearing site data or deleting the browser profile can remove the database, so create backups regularly. Settings includes a persistent storage request, which the browser may decline.
+
+The tracking date and event times come from the device clock. When restoring on a device in a different time zone, the original tracking date is preserved, while times are displayed in the viewer's local time zone. The application does not detect presence automatically: an operator enters all movements.
+
+## Project structure
+
+- `src/domain/` — models, state transition rules, and tests.
+- `src/data/` — IndexedDB, transactions, migrations, backup validation, and tests.
+- `src/composables/` — reactive state, commands, and calendar day rollover.
+- `src/components/` — employee list, action panel, event log, and settings.
+- `src/App.vue` — navigation, filters, and views.
+- `public/icons/` — application icons.
+- `tests/browser-smoke.mjs` — browser integration scenario.
+- `vite.config.ts` — build configuration, PWA manifest, and resource caching.
+- `.github/workflows/deploy.yml` — checks and GitHub Pages deployment.
