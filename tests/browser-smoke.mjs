@@ -9,7 +9,7 @@ await mkdir('test-results',{recursive:true})
 const context=await browser.newContext({viewport:{width:390,height:844},locale:'ru-RU',timezoneId:'Europe/Saratov',serviceWorkers:'allow'})
 const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message))
 page.setDefaultTimeout(30000)
-const base='http://127.0.0.1:4173/'
+const base=process.env.APP_URL||'http://127.0.0.1:4173/'
 async function openPerson(){await page.locator('.employee-row').filter({hasText:'Иванов Иван'}).click();await page.locator('dialog').waitFor()}
 async function closePerson(){await page.getByRole('button',{name:'Закрыть',exact:true}).click()}
 try {

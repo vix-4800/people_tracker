@@ -35,6 +35,46 @@ npm run preview
 
 ## Размещение
 
+### GitHub Pages
+
+В проект уже добавлен `.github/workflows/deploy.yml`. При отправке изменений в `main` он устанавливает зависимости по lockfile, запускает тесты, проверяет TypeScript, собирает и публикует `dist/`. Доступен также ручной запуск во вкладке Actions.
+
+1. Создайте пустой репозиторий на GitHub, например `tracker`. Для GitHub Free выберите публичный репозиторий.
+2. Отправьте исходники проекта, включая `.github/`, `pnpm-lock.yaml` и `pnpm-workspace.yaml`. Папки `node_modules/`, `dist/` и `test-results/` уже исключены через `.gitignore`.
+3. В репозитории откройте **Settings → Pages → Build and deployment → Source** и выберите **GitHub Actions**.
+4. Откройте **Actions → Publish to GitHub Pages → Run workflow**, выберите `main` и запустите публикацию. Последующие push в `main` публикуются автоматически.
+5. Дождитесь успешного завершения заданий `Test and build` и `Deploy`. Адрес сайта появится в результате deployment и в Settings → Pages. Для обычного репозитория это `https://USERNAME.github.io/tracker/`.
+
+Первичная отправка из этой папки в пустой репозиторий (замените `USERNAME` и при необходимости `tracker`):
+
+```sh
+git init -b main
+git add .
+git commit -m "Prepare application for GitHub Pages"
+git remote add origin https://github.com/USERNAME/tracker.git
+git push -u origin main
+```
+
+Если репозиторий уже настроен, используйте обычные `git add`, `git commit` и `git push` вместо повторного добавления remote. Workflow рассчитан на ветку `main`; для другой основной ветки измените `on.push.branches` в нём.
+
+**Редактировать `base` вручную не требуется:** workflow получает `base_path` из `actions/configure-pages` и передаёт его в Vite через `--base`. Это поддерживает любое имя репозитория, корневой сайт `USERNAME.github.io` и настроенный собственный домен. В локальной конфигурации остаётся `base: './'`. Манифест, иконки и service worker собираются для того же пути.
+
+Для локальной проверки сборки под подкаталогом:
+
+```sh
+pnpm test
+pnpm build --base /tracker/
+pnpm preview --base /tracker/
+```
+
+Откройте `http://localhost:4173/tracker/`. Браузерный интеграционный сценарий также можно направить на этот адрес: в PowerShell `$env:APP_URL='http://127.0.0.1:4173/tracker/'; pnpm test:browser`.
+
+Если первый автоматический запуск произошёл до включения Pages и завершился ошибкой, включите Pages по шагу 3 и запустите workflow повторно. Настройка следует официальным инструкциям [Vite](https://vite.dev/guide/static-deploy.html#github-pages) и [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+На хостинг отправляется только приложение. Записи сотрудников остаются в IndexedDB браузера. Для переноса записей с localhost экспортируйте JSON на старом адресе и импортируйте на опубликованном сайте. Не добавляйте персональные резервные копии в репозиторий.
+
+### Другой статический хостинг
+
 Передайте **всё содержимое `dist/`** на статический HTTPS-хостинг либо внутренний HTTPS-сервер. Node.js на сервере не требуется. Относительный `base: './'` позволяет размещать сборку в подкаталоге. URL каталога должен заканчиваться `/`. Не открывайте index.html через `file://`.
 
 Для nginx, например:
