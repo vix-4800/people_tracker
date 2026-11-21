@@ -1,15 +1,35 @@
 import Dexie, { type Table } from 'dexie'
-import type { Action, Backup, DirectoryEntry, MovementEvent, Setting } from '../domain/types'
+import type { Action, Backup, DirectoryEntry, Employee, MovementEvent, Setting } from '../domain/types'
 import { createEvent, localDay } from '../domain/movements'
 import { validateBackup } from './backup'
 export class TrackerDB extends Dexie {
-  employees!: Table<DirectoryEntry,string>; rooms!: Table<DirectoryEntry,string>; movementEvents!: Table<MovementEvent,string>; settings!: Table<Setting,string>
+  employees!: Table<Employee,string>; rooms!: Table<DirectoryEntry,string>; movementEvents!: Table<MovementEvent,string>; settings!: Table<Setting,string>
   constructor(name='office-movements') { super(name); this.version(1).stores({employees:'id',rooms:'id',movementEvents:'id, employeeId, day',settings:'key'}); this.version(2).stores({employees:'id, order',rooms:'id, order',movementEvents:'id, employeeId, day, [employeeId+day]',settings:'key'}).upgrade(async tx=>{ for(const table of ['employees','rooms']) { let order=0; await tx.table(table).toCollection().modify(e=>{e.order=order++}) } }) }
 }
 export type Directory = 'employees' | 'rooms'
-export async function saveEntry(db:TrackerDB,table:Directory,name:string,id?:string):Promise<DirectoryEntry> {
-  name=name.trim();if(!name||name.length>120)throw new Error('Введите название длиной от 1 до 120 символов')
-  return db.transaction('rw',db[table],async()=>{const old=id?await db[table].get(id):undefined;if(id&&!old)throw new Error('Запись больше не существует');const last=await db[table].orderBy('order').last();const entry:DirectoryEntry={id:id??crypto.randomUUID(),name,archived:old?.archived??false,order:old?.order??(last?.order??-1)+1};await db[table].put(entry);return entry})
+export async function saveEntry(db:TrackerDB,table:Directory,name:string,id?:string,homeRoomId?:string|null):Promise<DirectoryEntry> {
+  name=name.trim()
+  if(!name||name.length>120)throw new Error('Введите название длиной от 1 до 120 символов')
+  const entries=db[table]
+  const tables=table==='employees'?[db.employees,db.rooms]:[db.rooms]
+  return db.transaction('rw',tables,async()=>{
+    const old:Employee|undefined=id?await entries.get(id):undefined
+    if(id&&!old)throw new Error('Запись больше не существует')
+    const last=old?undefined:await entries.orderBy('order').last()
+    const entry:Employee={id:id??crypto.randomUUID(),name,archived:old?.archived??false,order:old?.order??(last?.order??-1)+1}
+    if(table==='employees') {
+      const roomId=homeRoomId===undefined?old?.homeRoomId:homeRoomId
+      if(roomId!=null) {
+        if(roomId!==old?.homeRoomId) {
+          const room=await db.rooms.get(roomId)
+          if(!room||room.archived)throw new Error('Кабинет отсутствует или находится в архиве')
+        }
+        entry.homeRoomId=roomId
+      }
+    }
+    await entries.put(entry)
+    return entry
+  })
 }
 export async function recordMovement(db:TrackerDB,employeeId:string,action:Action):Promise<void> {
   await db.transaction('rw',db.employees,db.rooms,db.movementEvents,async()=>{

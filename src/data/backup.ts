@@ -1,4 +1,4 @@
-import type { Action, Backup, DirectoryEntry, Location, MovementEvent, Setting } from '../domain/types'
+import type { Action, Backup, DirectoryEntry, Employee, Location, MovementEvent, Setting } from '../domain/types'
 import { transition } from '../domain/movements'
 function fail():never {throw new Error('Некорректная резервная копия: проверьте формат, ссылки и последовательность событий')}
 function object(value:unknown):Record<string,unknown>{if(!value||typeof value!=='object'||Array.isArray(value))return fail();return value as Record<string,unknown>}
@@ -6,13 +6,30 @@ function text(value:unknown,max=120):string{if(typeof value!=='string'||!value.t
 function array(value:unknown):unknown[]{if(!Array.isArray(value)||value.length>500000)return fail();return value}
 function integer(value:unknown):number{if(typeof value!=='number'||!Number.isSafeInteger(value)||value<0)return fail();return value}
 function unique(ids:string[]){if(new Set(ids).size!==ids.length)fail()}
-function entries(value:unknown):DirectoryEntry[]{const list=array(value).map(item=>{const e=object(item);if(typeof e.archived!=='boolean')return fail();return {id:text(e.id,200),name:text(e.name),archived:e.archived,order:integer(e.order)}});unique(list.map(x=>x.id));return list}
+function directoryEntry(e:Record<string,unknown>):DirectoryEntry {
+  if(typeof e.archived!=='boolean')return fail()
+  return {id:text(e.id,200),name:text(e.name),archived:e.archived,order:integer(e.order)}
+}
 function location(value:unknown,rooms:Set<string>):Location{const l=object(value);if(l.status==='in_room'){const roomId=text(l.roomId,200);if(!rooms.has(roomId))fail();return {status:'in_room',roomId}}if(l.status==='not_arrived'||l.status==='away'||l.status==='finished')return {status:l.status};return fail()}
 function same(a:Location,b:Location){return a.status===b.status&&(a.status!=='in_room'||(b.status==='in_room'&&a.roomId===b.roomId))}
 export function validateBackup(input:unknown):Backup {
   const b=object(input);if(b.format!=='office-movements'||b.version!==1)throw new Error('Неподдерживаемый формат или версия резервной копии')
   const exportedAt=text(b.exportedAt,50);if(!Number.isFinite(Date.parse(exportedAt)))fail()
-  const employees=entries(b.employees),rooms=entries(b.rooms),employeeIds=new Set(employees.map(e=>e.id)),roomIds=new Set(rooms.map(r=>r.id))
+  const rooms=array(b.rooms).map(item=>directoryEntry(object(item)))
+  unique(rooms.map(room=>room.id))
+  const roomIds=new Set(rooms.map(room=>room.id))
+  const employees=array(b.employees).map(item=>{
+    const entry=object(item)
+    const employee:Employee=directoryEntry(entry)
+    if(entry.homeRoomId!==undefined) {
+      const roomId=text(entry.homeRoomId,200)
+      if(!roomIds.has(roomId))fail()
+      employee.homeRoomId=roomId
+    }
+    return employee
+  })
+  unique(employees.map(employee=>employee.id))
+  const employeeIds=new Set(employees.map(employee=>employee.id))
   const movementEvents:MovementEvent[]=array(b.movementEvents).map(item=>{
     const e=object(item),day=text(e.day,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||new Date(`${day}T12:00:00Z`).toISOString().slice(0,10)!==day)fail()
     const employeeId=text(e.employeeId,200);if(!employeeIds.has(employeeId))fail()

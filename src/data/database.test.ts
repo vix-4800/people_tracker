@@ -32,14 +32,33 @@ describe('локальная база',()=>{
     expect((await db.employees.get(e.id))?.name).toBe('Новое имя')
     await expect(recordMovement(db,e.id,{kind:'room',roomId:r.id})).rejects.toThrow()
   })
+  it('сохраняет личный кабинет при переименовании и позволяет снять назначение',async()=>{
+    const {db,e,r}=await setup()
+    await saveEntry(db,'employees',e.name,e.id,r.id)
+    await saveEntry(db,'employees','Новое имя',e.id)
+    expect(await db.employees.get(e.id)).toMatchObject({name:'Новое имя',homeRoomId:r.id})
+    await saveEntry(db,'employees','Новое имя',e.id,null)
+    expect(await db.employees.get(e.id)).not.toHaveProperty('homeRoomId')
+  })
+  it('не назначает отсутствующий или архивный кабинет',async()=>{
+    const {db,e,r}=await setup()
+    await db.rooms.update(r.id,{archived:true})
+    for(const roomId of [r.id,'missing']) {
+      await expect(saveEntry(db,'employees','Новое имя',e.id,roomId)).rejects.toThrow()
+    }
+    expect(await db.employees.get(e.id)).toEqual(e)
+  })
   it('восстанавливает полную копию, включая архив и настройки',async()=>{
     const {db,e,r}=await setup()
+    await saveEntry(db,'employees',e.name,e.id,r.id)
     await recordMovement(db,e.id,{kind:'room',roomId:r.id})
     await db.employees.update(e.id,{archived:true})
+    await db.rooms.update(r.id,{archived:true})
     await db.settings.put({key:'theme',value:'dark'})
     const backup=await exportBackup(db)
     await db.movementEvents.clear()
     await importBackup(db,backup)
+    expect(await db.employees.get(e.id)).toMatchObject({homeRoomId:r.id})
     expect(await exportBackup(db)).toMatchObject({employees:backup.employees,rooms:backup.rooms,movementEvents:backup.movementEvents,settings:backup.settings})
   })
   it('отклоняет повреждённый импорт до изменения базы',async()=>{
@@ -47,6 +66,7 @@ describe('локальная база',()=>{
     await expect(importBackup(db,{...backup,version:99})).rejects.toThrow()
     expect(await db.employees.count()).toBe(1)
     expect(()=>validateBackup({...backup,employees:[...backup.employees,...backup.employees]})).toThrow()
+    expect(()=>validateBackup({...backup,employees:[{...backup.employees[0],homeRoomId:'missing'}]})).toThrow()
     expect(()=>validateBackup({...backup,movementEvents:[{id:'bad'}]})).toThrow()
   })
   it('отклоняет нарушенные цепочки и несуществующие ссылки',async()=>{

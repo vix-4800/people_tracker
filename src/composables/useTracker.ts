@@ -2,10 +2,10 @@ import { computed, onScopeDispose, ref } from 'vue'
 import { liveQuery } from 'dexie'
 import { TrackerDB, exportBackup, importBackup, recordMovement, reorderEntries, saveEntry, undoLast, type Directory } from '../data/database'
 import { localDay, stateFor } from '../domain/movements'
-import type { Action, Backup, DirectoryEntry, MovementEvent, Setting } from '../domain/types'
+import type { Action, Backup, DirectoryEntry, Employee, MovementEvent, Setting } from '../domain/types'
 export const db = new TrackerDB()
 export function useTracker() {
-  const employees=ref<DirectoryEntry[]>([]), rooms=ref<DirectoryEntry[]>([]), events=ref<MovementEvent[]>([]), settings=ref<Setting[]>([])
+  const employees=ref<Employee[]>([]), rooms=ref<DirectoryEntry[]>([]), events=ref<MovementEvent[]>([]), settings=ref<Setting[]>([])
   const today=ref(localDay()), date=ref(today.value), error=ref(''), ready=ref(false), busy=ref(false), notice=ref('')
   const subscription=liveQuery(()=>db.transaction('r',db.tables,async()=>({employees:await db.employees.orderBy('order').toArray(),rooms:await db.rooms.orderBy('order').toArray(),events:await db.movementEvents.toArray(),settings:await db.settings.toArray()}))).subscribe({next:data=>{employees.value=data.employees;rooms.value=data.rooms;events.value=data.events;settings.value=data.settings;ready.value=true},error:e=>{error.value=`Не удалось открыть локальную базу: ${String(e)}. Проверьте разрешения браузера и свободное место.`;ready.value=true}})
   function tick() { const next=localDay(); if(next!==today.value) {if(date.value===today.value) date.value=next; today.value=next} }
@@ -18,7 +18,7 @@ export function useTracker() {
   async function run(task:()=>Promise<unknown>,message='') { if(busy.value) return false; busy.value=true; error.value=''; try {await task(); notice.value=message; return true} catch(e) {error.value=e instanceof Error?e.message:'Не удалось сохранить данные'; return false} finally {busy.value=false} }
   async function act(id:string,action:Action) {tick(); if(date.value!==today.value){error.value='Прошлые дни доступны только для просмотра';return false} return run(()=>recordMovement(db,id,action),'Отметка сохранена')}
   async function undo(id:string) { tick(); if(date.value!==today.value)return false; return run(()=>undoLast(db,id),'Последнее действие отменено') }
-  const save=(table:Directory,name:string,id?:string)=>run(()=>saveEntry(db,table,name,id),'Сохранено')
+  const save=(table:Directory,name:string,id?:string,homeRoomId?:string|null)=>run(()=>saveEntry(db,table,name,id,homeRoomId),'Сохранено')
   const archive=(table:Directory,entry:DirectoryEntry)=>run(()=>db[table].update(entry.id,{archived:!entry.archived}),'Сохранено')
   async function move(table:Directory,id:string,direction:number) { const list=[...(table==='employees'?employees.value:rooms.value)]; const i=list.findIndex(x=>x.id===id); const j=i+direction; if(i<0||j<0||j>=list.length)return; [list[i],list[j]]=[list[j],list[i]]; await run(()=>reorderEntries(db,table,list.map(x=>x.id))) }
   const theme=computed(()=>settings.value.find(s=>s.key==='theme')?.value??'system')
